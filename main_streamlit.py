@@ -2,6 +2,7 @@ import streamlit as st
 import SessionState
 import requests
 from bs4 import BeautifulSoup
+import re
 
 st.set_page_config(page_title="Medicamentos y alergias",layout='wide')
 session_state = SessionState.get(a=0)
@@ -11,13 +12,16 @@ siteFooter = st.beta_container()
 with selection_col:
     input = st.text_input('Escribe aqui el medicamento')
 
-    modos_disponibles=['Gluten']
+    modos_disponibles=['Gluten','Proteína leche (in work)']
     modo_selected=st.selectbox('Alergia a buscar',
                                            options=modos_disponibles, index=0)
 
     if modo_selected=='Gluten':
         keywords=['gluten', 'trigo','cebada','avena','cebada','triticale', 'centeno',
                   'celíac', 'celiac','celiaq', 'carboximetilalmid']
+    elif modo_selected=='Proteína leche (in work)':
+        keywords=['caseína', 'caseina', 'proteinsuccinilato','lactoferrina', 'ferplex','ferrocur']
+
     meds=False
     med_dict = {}
     if st.button('Buscar'):
@@ -29,13 +33,16 @@ with selection_col:
             medicina=med.find('a')
             nombre=medicina.text
             link=medicina['href']
-            code=link[-5:]
+            if 'cimavet' in link.lower():
+                continue
+            code=re.search(r"\d+",link)[0]
             img=med.find('img')['src']
             status=[]
             FT_link=f"https://cima.aemps.es/cima/dochtml/ft/{code}/FT_{code}.html"
             sopa_FT=BeautifulSoup(requests.get(FT_link,timeout=20).content, 'html.parser')
             for key in keywords:
                 status.append(int(key in str(sopa_FT).lower()))
+
             med_dict[nombre]={'link':FT_link, 'img':img,'status':status}
 
     with display_col:
@@ -43,12 +50,13 @@ with selection_col:
             if len(meds)==0:
                 st.write(f'No hemos encontrado medicamentos con {input}')
         for k in med_dict.keys():
-            st.image(f'{med_dict[k]["img"]}')
+            if len(med_dict[k]["img"])!=0:
+                st.image(med_dict[k]["img"])
             st.write(k)
             st.markdown(f'Ficha técnica: {med_dict[k]["link"]}', unsafe_allow_html=True)
             sum=0
             for i in range(len(keywords)):
-                if status[i]>0:
+                if med_dict[k]["status"][i]>0:
                     st.write(f'ALERTA: {keywords[i]} encontrado. Por favor, revisa la ficha técnica', unsafe_allow_html=True)
                     sum+=status[i]
             if sum==0:
